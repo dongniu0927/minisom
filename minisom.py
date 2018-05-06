@@ -9,6 +9,9 @@ from warnings import warn
 from numpy.testing import assert_almost_equal, assert_array_almost_equal
 from numpy.testing import assert_array_equal
 import unittest
+from _utils import Utils
+import numpy as np
+import json
 
 """
     Minimalistic implementation of the Self Organizing Maps (SOM).
@@ -24,7 +27,7 @@ def fast_norm(x):
 
 
 class MiniSom(object):
-    def __init__(self, x, y, input_len, sigma=1.0, learning_rate=0.5,
+    def __init__(self, x, y, input_len, weights, sigma=1.0, learning_rate=0.5,
                  decay_function=None, neighborhood_function='gaussian',
                  random_seed=None):
         """Initializes a Self Organizing Maps.
@@ -68,23 +71,19 @@ class MiniSom(object):
         """
         if sigma >= x/2.0 or sigma >= y/2.0:
             warn('Warning: sigma is too high for the dimension of the map.')
-        if random_seed:
-            self._random_generator = random.RandomState(random_seed)
-        else:
-            self._random_generator = random.RandomState(random_seed)
+        self._random_generator = random.RandomState(random_seed)
         if decay_function:
             self._decay_function = decay_function
         else:
             self._decay_function = lambda x, t, max_iter: x/(1+t/max_iter)
         self._learning_rate = learning_rate
         self._sigma = sigma
-        # random initialization
-        self._weights = self._random_generator.rand(x, y, input_len)*2-1
-        for i in range(x):
-            for j in range(y):
-                # normalization
-                norm = fast_norm(self._weights[i, j])
-                self._weights[i, j] = self._weights[i, j] / norm
+        self._x = x
+        self._y = y
+        self._input_len = input_len
+
+        self._weights = weights  # 获得weights
+
         self._activation_map = zeros((x, y))
         self._neigx = arange(x)
         self._neigy = arange(y)  # used to evaluate the neighborhood function
@@ -95,6 +94,32 @@ class MiniSom(object):
             raise ValueError(msg % (neighborhood_function,
                                     ', '.join(neig_functions.keys())))
         self.neighborhood = neig_functions[neighborhood_function]
+
+    @staticmethod
+    def init_weights(x, y, input_len, random_seed=None):
+        # random initialization
+        _random_generator = random.RandomState(random_seed)
+        _weights = _random_generator.rand(x, y, input_len) * 2 - 1
+        for i in range(x):
+            for j in range(y):
+                # normalization
+                norm = fast_norm(_weights[i, j])
+                _weights[i, j] = _weights[i, j] / norm
+        return _weights
+
+    def save_network(self, filename):
+        """存储权值"""
+        np_weights = np.array(self.get_weights())
+        weights = np_weights.flatten().tolist()
+        config = {
+            "x": self._x,
+            "y": self._y,
+            "weights": weights,
+            "input_len": self._input_len,
+            "weights_shape": np_weights.shape
+        }
+        if Utils.dump_json(filename, config):
+            Utils.show_msg("已经存储som网络到"+filename+"...")
 
     def get_weights(self):
         """Returns the weights of the neural network"""
@@ -186,6 +211,7 @@ class MiniSom(object):
         self._init_T(num_iteration)
         for iteration in range(num_iteration):
             # pick a random sample
+            Utils.show_msg("训练第"+str(iteration)+"组数据...")
             rand_i = self._random_generator.randint(len(data))
             self.update(data[rand_i], self.winner(data[rand_i]), iteration)
 
@@ -194,6 +220,7 @@ class MiniSom(object):
         self._init_T(len(data)*num_iteration)
         iteration = 0
         while iteration < num_iteration:
+            Utils.show_msg("训练第" + str(iteration) + "组数据...")
             idx = iteration % (len(data)-1)
             self.update(data[idx], self.winner(data[idx]), iteration)
             iteration += 1
