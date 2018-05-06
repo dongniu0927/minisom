@@ -251,6 +251,7 @@ class MiniSom(object):
 
     def activation_response(self, data):
         """
+            返回som矩阵中每个节点成为winner的次数
             Returns a matrix where the element i,j is the number of times
             that the neuron i,j have been winner.
         """
@@ -260,8 +261,11 @@ class MiniSom(object):
         return a
 
     def quantization_error(self, data):
-        """Returns the quantization error computed as the average
-        distance between each input sample and its best matching unit."""
+        """
+        返回所有输入数据与其winner神经元之间的距离差得平均值
+        Returns the quantization error computed as the average
+        distance between each input sample and its best matching unit.
+        """
         error = 0
         for x in data:
             error += fast_norm(x-self._weights[self.winner(x)])
