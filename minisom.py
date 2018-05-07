@@ -82,6 +82,9 @@ class MiniSom(object):
         self._y = y
         self._input_len = input_len
 
+        self.clusters = []  # 存储带label的聚类信息
+
+        self._weights = self.init_weights(x, y, input_len)
         self._weights = weights  # 获得weights
 
         self._activation_map = zeros((x, y))
@@ -107,7 +110,7 @@ class MiniSom(object):
                 _weights[i, j] = _weights[i, j] / norm
         return _weights
 
-    def save_network(self, filename):
+    def save_network(self, filename, save_clusers = False):
         """存储权值"""
         np_weights = np.array(self.get_weights())
         weights = np_weights.flatten().tolist()
@@ -118,6 +121,10 @@ class MiniSom(object):
             "input_len": self._input_len,
             "weights_shape": np_weights.shape
         }
+        if save_clusers:
+            if not len(self.clusters):
+                raise ("需要先调用train_random_with_label方法训练数据...")
+            config["clusters"] = self.get_clusters_center_coord()  # 要求需要在训练的时候调用train_random_with_label
         if Utils.dump_json(filename, config):
             Utils.show_msg("已经存储som网络到"+filename+"...")
 
@@ -159,6 +166,46 @@ class MiniSom(object):
         self._activate(x)
         return unravel_index(self._activation_map.argmin(),
                              self._activation_map.shape)
+
+    def winner_with_cluster(self, data_with_label):
+        winner_coord = self.winner(data_with_label["data"])  # 获胜元素
+        self.clusters.append({  # 会将每个winner带上label压入clusters
+            "label": data_with_label["label"],
+            "coord": list(winner_coord)
+        })
+
+    # 从clusters列表中找出label对应的index
+    def _get_cluster_index(self, clusters, label):
+        for (index, cluster) in enumerate(clusters):
+            if cluster["label"] == label:
+                return index
+        return -1
+
+    # 获得所有聚类类别的中心坐标信息
+    def get_clusters_center_coord(self):
+        """
+        :return: [{label:'', center: [2, 3], count: 6}]
+        """
+        if not len(self.clusters):
+            raise ("需要先用winner_with_label获得clusters...")
+        clusters = []
+        for (i, cluster) in enumerate(self.clusters):
+            label = cluster["label"]
+            index = self._get_cluster_index(clusters, label)
+            if index == -1:
+                clusters.append({
+                    "label": label,
+                    "center": list(cluster["coord"]),
+                    "count": 1
+                })
+            else:
+                clusters[index]["center"][0] += cluster["coord"][0]  # x坐标相加
+                clusters[index]["center"][1] += cluster["coord"][1]  # y坐标相加
+                clusters[index]["count"] += 1  # 每个label数据总数
+        for cluster in clusters:
+            cluster["center"][0] = round(cluster["center"][0] * 1.0 / cluster["count"], 2)  # 求x坐标均值
+            cluster["center"][1] = round(cluster["center"][1] * 1.0 / cluster["count"], 2)  # 求y坐标均值
+        return clusters
 
     def update(self, x, win, t):
         """Updates the weights of the neurons.
@@ -211,9 +258,10 @@ class MiniSom(object):
         self._init_T(num_iteration)
         for iteration in range(num_iteration):
             # pick a random sample
-            Utils.show_msg("训练第"+str(iteration)+"组数据...")
+            # Utils.show_msg("训练第"+str(iteration)+"组数据...")
             rand_i = self._random_generator.randint(len(data))
-            self.update(data[rand_i], self.winner(data[rand_i]), iteration)
+            winner_coord = self.winner(data[rand_i])  # 获胜元素
+            self.update(data[rand_i], winner_coord, iteration)
 
     def train_batch(self, data, num_iteration):
         """Trains using all the vectors in data sequentially"""
